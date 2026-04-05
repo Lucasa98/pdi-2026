@@ -63,7 +63,9 @@ def LUTPotencia(gamma: float, rango: np.ndarray[int] = [0, 256]) -> np.ndarray[i
         np.ndarray[int, float]: LUT s = r^(gamma)
     """
     grises = np.linspace(rango[0], rango[1], rango[1]-rango[0], endpoint=False)
-    return np.power(grises, gamma)
+    grises_norm = grises/255.0
+    # generar lut y reescalar a [0,255]
+    return np.power(grises_norm, gamma) * 255.0
 
 def promedio(imgs: np.ndarray[cv2.typing.MatLike]) -> cv2.typing.MatLike:
     """Promedio sumando y normalizando por el numero de imagenes
