@@ -158,3 +158,6 @@ def kernelImg(kernel):
     roi[kernel > 0] = [0, 255, 0]
 
     return kernel_img
+
+def altaPotencia(img, kernelSize=(3,3), sigma=1, A=1):
+    return A*img - cv2.GaussianBlur(img, kernelSize, sigmaX=sigma, sigmaY=sigma)
