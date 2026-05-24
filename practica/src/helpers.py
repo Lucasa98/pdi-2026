@@ -121,3 +121,40 @@ def multiplicacion(img: cv2.typing.MatLike, mascara: cv2.typing.MatLike) -> cv2.
         cv2.typing.MatLike: ROI
     """
     return np.multiply(img, mascara)
+
+def kernelCruzPromediado(size: int):
+    """Crear kernel de promediado en cruz
+
+    Args:
+        size (int): tamanio
+    """
+    # asegurar size impar
+    if size % 2 == 0:
+        size += 1
+
+    kernel = np.zeros((size, size), dtype=np.float32)
+    centro = size // 2
+
+    kernel[centro, :] = 1
+    kernel[:, centro] = 1
+
+    # Normalzar pesos
+    kernel /= kernel.sum()
+
+    return kernel
+
+def kernelImg(kernel):
+    h, w = kernel.shape
+
+    # fondo negro
+    kernel_img = np.zeros((127, 127, 3), dtype=np.uint8)
+
+    # centro
+    ini_y = 127 // 2 - h // 2
+    ini_x = 127 // 2 - w // 2
+
+    # dibujar kernel
+    roi = kernel_img[ini_y:ini_x+h, ini_x:ini_x+w]
+    roi[kernel > 0] = [0, 255, 0]
+
+    return kernel_img
