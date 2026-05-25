@@ -163,6 +163,7 @@ def altaPotencia(img, kernelSize=(3,3), sigma=1, A=1):
     return A*img - cv2.GaussianBlur(img, kernelSize, sigmaX=sigma, sigmaY=sigma)
 
 def apply_filter(img, mascara):
+    """Aplicar filtro en frecuencias"""
     # transformada
     dft = cv2.dft(np.float32(img), flags=cv2.DFT_COMPLEX_OUTPUT)
     # centrar
@@ -179,6 +180,7 @@ def apply_filter(img, mascara):
     return img_back
 
 def apply_pb_ideal(img, freq):
+    """Aplicar filtro pasa-bajos ideal en frecuencias"""
     # centro de la imagen
     c_row, c_col = img.shape[0]//2, img.shape[1]//2
     # circulo centrado y de radio igual a la frecuencia de corte
@@ -188,6 +190,7 @@ def apply_pb_ideal(img, freq):
     return apply_filter(img, mascara)
 
 def apply_pb_butterworth(img, freq, orden):
+    """Aplicar filtro pasa-bajos Butterworth en frecuencias"""
     c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
     mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
 
@@ -199,27 +202,49 @@ def apply_pb_butterworth(img, freq, orden):
 
     return apply_filter(img, mascara)
 
-def apply_pb_gaussiano(img, tam, sigma):
-    c_col = tam[1]//2
-    c_row = tam[0]//2
-    # malla
-    y, x = np.ogrid[-c_row : c_row+1, -c_col : c_col+1]
-    # filtro
-    mascara = np.exp(-(x**2 + y**2) / (2 * sigma**2))
+def apply_pb_gaussiano(img, sigma):
+    """Aplicar filtro pasa-bajos Gaussiano en frecuencias"""
+    c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
+    mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
 
-    # dft del filtro a escala de la imagen
-    filter_dft = np.fft.fft2(mascara, img.shape)
-    filter_dft_shift = np.fft.fftshift(filter_dft)
+    for u in range(img.shape[0]):
+        for v in range(img.shape[1]):
+            distance = np.sqrt((u - c_row) ** 2 + (v - c_col) ** 2)
+            mascara[u, v] = np.exp(-(distance**2 / (2 * sigma**2)))
 
-    # dft de la imagen
-    dft = np.fft.fft2(img)
-    dft_shift = np.fft.fftshift(dft)
+    return apply_filter(img, mascara)
 
-    # aplicar filtro
-    filtered_dft_shift = dft_shift * filter_dft_shift
+def apply_pa_ideal(img, freq):
+    """Aplicar filtro pasa-altos ideal en frecuencias"""
+    # centro de la imagen
+    c_row, c_col = img.shape[0]//2, img.shape[1]//2
+    # circulo centrado y de radio igual a la frecuencia de corte
+    mascara = np.ones((img.shape[0], img.shape[1]), dtype=np.float32)
+    cv2.circle(mascara, (c_col, c_row), freq, 0, thickness=-1)
 
-    # invertir
-    filtered_dft = np.fft.ifftshift(filtered_dft_shift)
-    filtered = np.fft.ifft2(filtered_dft)
+    return apply_filter(img, mascara)
 
-    return np.abs(filtered)
+def apply_pa_butterworth(img, freq, orden):
+    """Aplicar filtro pasa-altos Butterworth en frecuencias"""
+    c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
+    mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
+
+    for u in range(img.shape[0]):
+        for v in range(img.shape[1]):
+            # distancia al centro
+            distance = np.sqrt((u - c_row) ** 2 + (v - c_col) ** 2)
+            mascara[u, v] = 1- (1 / (1 + (distance / freq) ** (2 * orden)))
+
+    return apply_filter(img, mascara)
+
+def apply_pa_gaussiano(img, sigma):
+    """Aplicar filtro pasa-altos Gaussiano en frecuencias"""
+    c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
+    mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
+
+    for u in range(img.shape[0]):
+        for v in range(img.shape[1]):
+            distance = np.sqrt((u - c_row) ** 2 + (v - c_col) ** 2)
+            mascara[u, v] = 1 - np.exp(-(distance**2 / (2 * sigma**2)))
+
+    return apply_filter(img, mascara)
