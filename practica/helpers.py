@@ -161,3 +161,65 @@ def kernelImg(kernel):
 
 def altaPotencia(img, kernelSize=(3,3), sigma=1, A=1):
     return A*img - cv2.GaussianBlur(img, kernelSize, sigmaX=sigma, sigmaY=sigma)
+
+def apply_filter(img, mascara):
+    # transformada
+    dft = cv2.dft(np.float32(img), flags=cv2.DFT_COMPLEX_OUTPUT)
+    # centrar
+    dft_shift = np.fft.fftshift(dft)
+    # aplicar filtro
+    filtered_dft = dft_shift * mascara[:, :, np.newaxis]
+    # desplazar a ubicacion original
+    f_ishift = np.fft.ifftshift(filtered_dft)
+    # dft inversa
+    img_back = cv2.idft(f_ishift)
+    img_back = cv2.magnitude(img_back[:,:,0], img_back[:,:,1])
+    # normalizar
+    img_back = np.clip(img_back / np.max(img_back), 0, 1)
+    return img_back
+
+def apply_pb_ideal(img, freq):
+    # centro de la imagen
+    c_row, c_col = img.shape[0]//2, img.shape[1]//2
+    # circulo centrado y de radio igual a la frecuencia de corte
+    mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
+    cv2.circle(mascara, (c_col, c_row), freq, 1, thickness=-1)
+
+    return apply_filter(img, mascara)
+
+def apply_pb_butterworth(img, freq, orden):
+    c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
+    mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
+
+    for u in range(img.shape[0]):
+        for v in range(img.shape[1]):
+            # distancia al centro
+            distance = np.sqrt((u - c_row) ** 2 + (v - c_col) ** 2)
+            mascara[u, v] = 1 / (1 + (distance / freq) ** (2 * orden))
+
+    return apply_filter(img, mascara)
+
+def apply_pb_gaussiano(img, tam, sigma):
+    c_col = tam[1]//2
+    c_row = tam[0]//2
+    # malla
+    y, x = np.ogrid[-c_row : c_row+1, -c_col : c_col+1]
+    # filtro
+    mascara = np.exp(-(x**2 + y**2) / (2 * sigma**2))
+
+    # dft del filtro a escala de la imagen
+    filter_dft = np.fft.fft2(mascara, img.shape)
+    filter_dft_shift = np.fft.fftshift(filter_dft)
+
+    # dft de la imagen
+    dft = np.fft.fft2(img)
+    dft_shift = np.fft.fftshift(dft)
+
+    # aplicar filtro
+    filtered_dft_shift = dft_shift * filter_dft_shift
+
+    # invertir
+    filtered_dft = np.fft.ifftshift(filtered_dft_shift)
+    filtered = np.fft.ifft2(filtered_dft)
+
+    return np.abs(filtered)
