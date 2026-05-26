@@ -160,7 +160,8 @@ def kernelImg(kernel):
     return kernel_img
 
 def altaPotencia(img, kernelSize=(3,3), sigma=1, A=1):
-    return A*img - cv2.GaussianBlur(img, kernelSize, sigmaX=sigma, sigmaY=sigma)
+    img_float = np.float32(img)
+    return A*img_float - cv2.GaussianBlur(img_float, kernelSize, sigmaX=sigma, sigmaY=sigma)
 
 def apply_filter(img, mascara):
     """Aplicar filtro en frecuencias"""
@@ -224,8 +225,8 @@ def apply_pa_ideal(img, freq):
 
     return apply_filter(img, mascara)
 
-def apply_pa_butterworth(img, freq, orden):
-    """Aplicar filtro pasa-altos Butterworth en frecuencias"""
+def mask_pa_butterworth(img, freq, orden):
+    """Mascara de filtro pasa-altos Butterworth en frecuencias"""
     c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
     mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
 
@@ -235,10 +236,16 @@ def apply_pa_butterworth(img, freq, orden):
             distance = np.sqrt((u - c_row) ** 2 + (v - c_col) ** 2)
             mascara[u, v] = 1- (1 / (1 + (distance / freq) ** (2 * orden)))
 
+    return mascara
+
+def apply_pa_butterworth(img, freq, orden):
+    """Aplicar filtro pasa-altos Butterworth en frecuencias"""
+    mascara = mask_pa_butterworth(img, freq, orden)
+
     return apply_filter(img, mascara)
 
-def apply_pa_gaussiano(img, sigma):
-    """Aplicar filtro pasa-altos Gaussiano en frecuencias"""
+def mask_pa_gaussiano(img, sigma):
+    """Mascara de filtro pasa-altos Gaussiano en frecuencias"""
     c_row, c_col = img.shape[0] // 2, img.shape[1] // 2
     mascara = np.zeros((img.shape[0], img.shape[1]), dtype=np.float32)
 
@@ -247,4 +254,48 @@ def apply_pa_gaussiano(img, sigma):
             distance = np.sqrt((u - c_row) ** 2 + (v - c_col) ** 2)
             mascara[u, v] = 1 - np.exp(-(distance**2 / (2 * sigma**2)))
 
+    return mascara
+
+def apply_pa_gaussiano(img, sigma):
+    """Aplicar filtro pasa-altos Gaussiano en frecuencias"""
+    mascara = mask_pa_gaussiano(img, sigma)
+
     return apply_filter(img, mascara)
+
+# Filtrado Homomórfico
+
+def apply_homomorfica(img, gH=1.5, gL=0.5, D0=30, c=1.0):
+    # 1. Transformación logarítmica (evitando log(0))
+    img_log = np.log1p(np.float32(img))
+
+    # 2. Cálculo de la TDF y centrado
+    dft = cv2.dft(img_log, flags=cv2.DFT_COMPLEX_OUTPUT)
+    dft_shift = np.fft.fftshift(dft)
+
+    # 3. Creación del Filtro Homomórfico H(u,v)
+    filas, cols = img.shape
+    crow, ccol = filas // 2, cols // 2
+    U, V = np.meshgrid(np.arange(cols), np.arange(filas))
+    D2 = (U - ccol)**2 + (V - crow)**2
+
+    # Fórmula del filtro: H(u,v) = (gH - gL) * [1 - exp(-c * (D^2 / D0^2))] + gL
+    H = (gH - gL) * (1 - np.exp(-c * (D2 / (D0**2 + 1e-5)))) + gL
+
+    # Adaptar H para multiplicar con los 2 canales (real e imaginario) de la dft
+    H = np.dstack((H, H))
+
+    # 4. Filtrado en frecuencia: TDF(f) .* H
+    dft_filtrada = dft_shift * H
+
+    # 5. TDF Inversa
+    f_ishift = np.fft.ifftshift(dft_filtrada)
+    img_back = cv2.idft(f_ishift, flags=cv2.DFT_SCALE)
+    img_back_mag = cv2.magnitude(img_back[:,:,0], img_back[:,:,1])
+
+    # 6. Exponencial: exp -> g(x,y)
+    img_exp = np.expm1(img_back_mag)
+
+    # Normalizar para visualización (0-255)
+    img_homomorfica = cv2.normalize(img_exp, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    return img_homomorfica
